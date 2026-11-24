@@ -7,8 +7,11 @@ andere Räume. Manche Nächte steht er kurz auf.
 """
 from __future__ import annotations
 
+import json
+import logging
 import random
 from dataclasses import dataclass
+from pathlib import Path
 from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Callable, Optional, Union
 
@@ -33,6 +36,9 @@ EXCURSION_REASONS = {
 }
 
 BASE_TIREDNESS = 0.001  # pro wacher Minute, etwa 0.9 nach 15 Stunden
+PLAN_AHEAD_DAYS = 7     # so viele Tage im Voraus steht der Terminplan fest
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -105,10 +111,11 @@ class Wichtel:
         tz: tzinfo,
         rng: Optional[random.Random] = None,
         on_event: Optional[EventCallback] = None,
-        plan_seed: object = 0,
+        plan_file: Optional[Path] = None,
     ):
         self.tz = tz
-        self.plan_seed = plan_seed
+        self.plan_file = Path(plan_file) if plan_file else None
+        self._planned_for: Optional[date] = None
         self.rng = rng or random.Random()
         self.on_event: EventCallback = on_event or (lambda now, msg: None)
         self.wake_window = tuple(parse_hhmm(x) for x in cfg["aufwachen"])
@@ -125,6 +132,7 @@ class Wichtel:
         self.tiredness = 0.0
         self.asleep_since: Optional[datetime] = None
         self.meals_done: set[str] = set()
+        self._load_plans()
 
     # ------------------------------------------------------------------ Status
     @property
@@ -151,21 +159,89 @@ class Wichtel:
     def plan_for(self, day: date) -> DayPlan:
         plan = self._plans.get(day)
         if plan is None:
-            # Fester Zufall pro Datum: der Tagesplan bleibt bei einem Neustart gleich.
-            rng = random.Random(f"wichtel-{self.plan_seed}-{day.isoformat()}")
-            wake = datetime.combine(day, random_time_between(*self.wake_window, rng), tzinfo=self.tz)
-            sleep = datetime.combine(day, random_time_between(*self.sleep_window, rng), tzinfo=self.tz)
-            plan = DayPlan(day, wake, sleep)
-            if rng.random() < self.night_up_chance:
-                start = sleep + timedelta(minutes=rng.randint(60, 300))
-                end = start + timedelta(minutes=rng.randint(3, 10))
-                latest = datetime.combine(day + timedelta(days=1), self.wake_window[0], tzinfo=self.tz)
-                if end < latest - timedelta(minutes=30):
-                    plan.night_up_start, plan.night_up_end = start, end
+            plan = self._new_plan(day)
             self._plans[day] = plan
-            for old in [d for d in self._plans if d < day - timedelta(days=3)]:
-                del self._plans[old]
         return plan
+
+    def _new_plan(self, day: date) -> DayPlan:
+        """Echt zufälliger Tagesplan: Aufstehen, Schlafengehen, nächtliches Aufstehen."""
+        rng = self.rng
+        wake = datetime.combine(day, random_time_between(*self.wake_window, rng), tzinfo=self.tz)
+        sleep = datetime.combine(day, random_time_between(*self.sleep_window, rng), tzinfo=self.tz)
+        plan = DayPlan(day, wake, sleep)
+        if rng.random() < self.night_up_chance:
+            start = sleep + timedelta(minutes=rng.randint(60, 300))
+            end = start + timedelta(minutes=rng.randint(3, 10))
+            latest = datetime.combine(day + timedelta(days=1), self.wake_window[0], tzinfo=self.tz)
+            if end < latest - timedelta(minutes=30):
+                plan.night_up_start, plan.night_up_end = start, end
+        return plan
+
+    def plan_ahead(self, today: date) -> None:
+        """Terminplan von gestern bis PLAN_AHEAD_DAYS Tage voraus festlegen und speichern."""
+        for offset in range(-1, PLAN_AHEAD_DAYS + 1):
+            self.plan_for(today + timedelta(days=offset))
+        for old in [d for d in self._plans if d < today - timedelta(days=2)]:
+            del self._plans[old]
+        self._planned_for = today
+        self.save_plans()
+
+    def upcoming(self, today: date, days: int = PLAN_AHEAD_DAYS) -> list[DayPlan]:
+        return [self.plan_for(today + timedelta(days=i)) for i in range(days)]
+
+    # ------------------------------------------------------------ Speichern
+    def _load_plans(self) -> None:
+        if not self.plan_file:
+            return
+        try:
+            data = json.loads(self.plan_file.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        except Exception as exc:
+            log.warning("Terminplan %s unlesbar (%s), plane neu", self.plan_file, exc)
+            return
+
+        def dt(value):
+            return None if value is None else datetime.fromisoformat(value).astimezone(self.tz)
+
+        for key, entry in data.items():
+            try:
+                plan = DayPlan(
+                    date.fromisoformat(key),
+                    dt(entry["aufwachen"]),
+                    dt(entry["schlafen"]),
+                    dt(entry.get("nachts_auf")),
+                    dt(entry.get("nachts_auf_ende")),
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                log.warning("Terminplan-Eintrag %s ungültig (%s), ignoriere ihn", key, exc)
+                continue
+            self._plans[plan.day] = plan
+        log.info("Terminplan geladen: %d Tage", len(self._plans))
+
+    def save_plans(self) -> None:
+        if not self.plan_file:
+            return
+
+        def iso(value):
+            return None if value is None else value.isoformat()
+
+        data = {
+            d.isoformat(): {
+                "aufwachen": iso(p.wake),
+                "schlafen": iso(p.sleep),
+                "nachts_auf": iso(p.night_up_start),
+                "nachts_auf_ende": iso(p.night_up_end),
+            }
+            for d, p in sorted(self._plans.items())
+        }
+        try:
+            self.plan_file.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.plan_file.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(self.plan_file)
+        except OSError as exc:
+            log.warning("Terminplan konnte nicht gespeichert werden: %s", exc)
 
     # ------------------------------------------------------------------ Ablauf
     def resync(self, now: datetime) -> None:
@@ -176,6 +252,8 @@ class Wichtel:
 
     def step(self, now: datetime) -> None:
         """Eine Minute Wichtel-Leben."""
+        if self._planned_for != now.date():
+            self.plan_ahead(now.date())
         today = self.plan_for(now.date())
         yesterday = self.plan_for(now.date() - timedelta(days=1))
         should_be_awake = today.wake <= now < today.sleep
@@ -252,6 +330,7 @@ class Wichtel:
         # Sehr müde am Abend: früher ins Bett
         if self.tiredness >= 1.0 and now.time() >= self.sleep_window[0]:
             plan.sleep = now
+            self.save_plans()
             self._go_to_bed(now, early=True)
             return
 

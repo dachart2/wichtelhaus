@@ -61,6 +61,7 @@ DEFAULTS: dict[str, Any] = {
         "schlafen": ["20:00", "23:00"],
         "nachts_aufstehen": 0.5,
         "ausflug_chance": 0.015,
+        "plan_datei": "state/wichtelplan.json",
     },
 }
 
@@ -87,6 +88,8 @@ def load_config(path: Path | str) -> dict:
     validate(cfg)
     cache = Path(cfg["wetter"]["cache_datei"])
     cfg["_cache_path"] = cache if cache.is_absolute() else path.parent / cache
+    plan = Path(cfg["wichtel"]["plan_datei"])
+    cfg["_plan_path"] = plan if plan.is_absolute() else path.parent / plan
     return cfg
 
 

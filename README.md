@@ -109,6 +109,7 @@ Weitere Optionen:
 | `--live` | eine farbige, laufend aktualisierte Statuszeile (Zonen und Ofenflackern) |
 | `--no-color` | ohne Farben |
 | `--test-hardware` | Zonen, Ofen und Relais nacheinander testen |
+| `--plan` | Terminplan des Wichtels (Aufstehen, Schlafen, nachts auf) für 7 Tage |
 
 Tests: `python -m unittest discover -s tests`
 

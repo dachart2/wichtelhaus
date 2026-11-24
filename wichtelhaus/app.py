@@ -68,7 +68,7 @@ class WichtelHaus:
         )
         self.wichtel = Wichtel(
             cfg["wichtel"], self.tz, rng=random.Random(args.seed), on_event=self._event,
-            plan_seed=args.seed if args.seed is not None else 0,
+            plan_file=None if args.sim else cfg["_plan_path"],
         )
 
         leds = cfg["leds"]
@@ -322,6 +322,27 @@ class WichtelHaus:
 
 
 # ----------------------------------------------------------------- Kommandozeile
+def show_plan(cfg: dict, args: argparse.Namespace) -> int:
+    """Terminplan anzeigen. Am Pi aus der Datei des Dienstes (nur lesen)."""
+    tz = ZoneInfo(cfg["standort"]["zeitzone"])
+    today = datetime.now(tz).date()
+    path = cfg["_plan_path"]
+    if not args.sim and path.exists():
+        w = Wichtel(cfg["wichtel"], tz, plan_file=path)
+        w.plan_file = None  # nur lesen, schreiben tut der Dienst
+        print(f"Terminplan des Wichtels ({path}):")
+    else:
+        w = Wichtel(cfg["wichtel"], tz, rng=random.Random(args.seed))
+        print("Beispiel-Terminplan (zufällig, nicht gespeichert):")
+    for p in w.upcoming(today):
+        night = f"{p.night_up_start:%H:%M}-{p.night_up_end:%H:%M}" if p.night_up_start else "-"
+        print(
+            f"  {WEEKDAYS[p.day.weekday()]} {p.day:%d.%m.}   aufstehen {p.wake:%H:%M}   "
+            f"schlafen {p.sleep:%H:%M}   nachts auf {night}"
+        )
+    return 0
+
+
 def parse_start(text: str, tz) -> datetime:
     for pattern in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
         try:
@@ -343,6 +364,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--live", action="store_true", help="eine laufend aktualisierte Statuszeile (mit Farbe)")
     p.add_argument("--no-color", action="store_true", help="keine ANSI-Farben in der Konsole")
     p.add_argument("--test-hardware", action="store_true", help="Zonen, Ofen und Relais nacheinander testen")
+    p.add_argument("--plan", action="store_true", help="Terminplan des Wichtels für die nächsten Tage anzeigen")
     p.add_argument("-v", "--verbose", action="store_true", help="mehr Details im Log")
     args = p.parse_args(argv)
     if not args.sim and (args.speed != 1.0 or args.start):
@@ -382,6 +404,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except (OSError, ValueError, yaml.YAMLError) as exc:
         log.error("Konfiguration %s fehlerhaft: %s", args.config, exc)
         return 2
+    if args.plan:
+        return show_plan(cfg, args)
     try:
         house = WichtelHaus(cfg, args)
     except Exception:

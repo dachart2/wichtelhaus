@@ -55,14 +55,24 @@ class WichtelTest(unittest.TestCase):
         self.assertTrue(any("Basteln" in e for e in events))
 
 
-class PlanStabilityTest(unittest.TestCase):
-    def test_restart_keeps_day_plan(self):
+class PlanTest(unittest.TestCase):
+    def test_schedule_survives_restart(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "plan.json"
+            today = date(2026, 11, 24)
+            a = Wichtel(CFG, TZ, plan_file=path)
+            a.plan_ahead(today)
+            b = Wichtel(CFG, TZ, plan_file=path)  # "Neustart"
+            for i in range(8):
+                d = today + timedelta(days=i)
+                pa, pb = a.plan_for(d), b.plan_for(d)
+                self.assertEqual((pa.wake, pa.sleep, pa.night_up_start), (pb.wake, pb.sleep, pb.night_up_start))
+
+    def test_really_random(self):
         d = date(2026, 11, 24)
-        a = Wichtel(CFG, TZ, rng=random.Random(1)).plan_for(d)
-        b = Wichtel(CFG, TZ, rng=random.Random(2)).plan_for(d)
-        self.assertEqual((a.wake, a.sleep, a.night_up_start), (b.wake, b.sleep, b.night_up_start))
-        c = Wichtel(CFG, TZ).plan_for(d + timedelta(days=1))
-        self.assertNotEqual((a.wake.time(), a.sleep.time()), (c.wake.time(), c.sleep.time()))
+        plans = {(Wichtel(CFG, TZ).plan_for(d).wake, Wichtel(CFG, TZ).plan_for(d).sleep) for _ in range(20)}
+        self.assertGreater(len(plans), 1)
 
 
 class SunTest(unittest.TestCase):

@@ -68,3 +68,4 @@ wichtel:
   schlafen: ["20:00", "23:00"]
   nachts_aufstehen: 0.5           # Wahrscheinlichkeit pro Nacht
   ausflug_chance: 0.015           # pro Minute: kurz in einen anderen Raum
+  plan_datei: state/wichtelplan.json   # Terminplan (7 Tage voraus), übersteht Neustarts
