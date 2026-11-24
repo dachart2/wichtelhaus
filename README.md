@@ -13,8 +13,8 @@ man, wo er gerade ist:
 - **Ofen** (ein paar LEDs, die wie Feuer flackern): brennt, wenn es draußen
   kälter als 5 °C ist und der Wichtel wach ist. Nach dem Einschlafen glimmt noch
   eine Stunde Glut.
-- **Außenlicht** (Relais, Lichterkette): von Sonnenuntergang bis Sonnenaufgang
-  oder bis zu einer einstellbaren Uhrzeit.
+- **Außenlicht** (Relais, Lichterkette): vom 1. bis 31. Dezember jeden Abend
+  von Sonnenuntergang bis 22:00 (Zeitraum und Uhrzeit einstellbar).
 - **Laterne** (eigenes Relais, LED-Lämpchen an der Tür): von Sonnenuntergang bis
   Sonnenaufgang.
 

@@ -21,7 +21,7 @@ from .clock import Clock
 from .config import load_config
 from .fire import Fire
 from .outputs import make_outputs
-from .sun import SunTimes
+from .sun import SunTimes, parse_month_day
 from .weather import Weather
 from .wichtel import ROOM_NAMES, Wichtel, parse_hhmm
 
@@ -80,6 +80,8 @@ class WichtelHaus:
         self.outside_off_at = parse_hhmm(off_at) if off_at is not None else None
         lantern_off = cfg["laterne"]["aus_um"]
         self.lantern_off_at = parse_hhmm(lantern_off) if lantern_off is not None else None
+        self.outside_season = self._season(cfg["aussenlicht"]["zeitraum"])
+        self.lantern_season = self._season(cfg["laterne"]["zeitraum"])
 
         self.pixels: list[Color] = [(0, 0, 0)] * self.n
         self.outside_on = False
@@ -181,9 +183,9 @@ class WichtelHaus:
         self.pixel_out.show(px)
 
         # Außenlicht
-        self.outside_on = bool(cfg["aussenlicht"]["aktiv"]) and self.sun.outside_light_on(now, self.outside_off_at)
+        self.outside_on = bool(cfg["aussenlicht"]["aktiv"]) and self.sun.outside_light_on(now, self.outside_off_at, self.outside_season)
         self.relay_out.set(self.outside_on)
-        self.lantern_on = bool(cfg["laterne"]["aktiv"]) and self.sun.outside_light_on(now, self.lantern_off_at)
+        self.lantern_on = bool(cfg["laterne"]["aktiv"]) and self.sun.outside_light_on(now, self.lantern_off_at, self.lantern_season)
         self.lantern_out.set(self.lantern_on)
 
         oven_mode = "brennt" if oven_target >= 1 else ("Glut" if oven_target > 0 else "aus")
@@ -206,6 +208,10 @@ class WichtelHaus:
                 self._last_live = real
                 sys.stdout.write("\r" + self.status_line(now) + "\x1b[K")
                 sys.stdout.flush()
+
+    @staticmethod
+    def _season(value):
+        return None if value is None else (parse_month_day(value[0]), parse_month_day(value[1]))
 
     # -------------------------------------------------------------- Anzeige
     def _block(self, color: Color, label: str) -> str:

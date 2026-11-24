@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
+from .sun import parse_month_day
 from .wichtel import ROOMS, parse_hhmm
 
 DEFAULTS: dict[str, Any] = {
@@ -53,8 +54,8 @@ DEFAULTS: dict[str, Any] = {
         "glut_helligkeit": 0.3,
     },
     "wetter": {"intervall_minuten": 20, "timeout_sekunden": 10, "cache_datei": "state/temperatur.json"},
-    "aussenlicht": {"aktiv": True, "pin": 21, "active_low": True, "aus_um": None},
-    "laterne": {"aktiv": True, "pin": 20, "active_low": True, "aus_um": None},
+    "aussenlicht": {"aktiv": True, "pin": 21, "active_low": True, "aus_um": "22:00", "zeitraum": ["01.12.", "31.12."]},
+    "laterne": {"aktiv": True, "pin": 20, "active_low": True, "aus_um": None, "zeitraum": None},
     "wichtel": {
         "aufwachen": ["06:00", "09:00"],
         "schlafen": ["20:00", "23:00"],
@@ -127,6 +128,10 @@ def validate(cfg: dict) -> None:
     for key in ("aussenlicht", "laterne"):
         if cfg[key]["aus_um"] is not None:
             parse_hhmm(cfg[key]["aus_um"])
+        if cfg[key]["zeitraum"] is not None:
+            check(len(cfg[key]["zeitraum"]) == 2, f"{key}.zeitraum: [\"von\", \"bis\"], z. B. [\"01.12.\", \"31.12.\"]")
+            for v in cfg[key]["zeitraum"]:
+                parse_month_day(v)
     if cfg["aussenlicht"]["aktiv"] and cfg["laterne"]["aktiv"]:
         check(int(cfg["aussenlicht"]["pin"]) != int(cfg["laterne"]["pin"]), "aussenlicht und laterne brauchen verschiedene Pins")
 

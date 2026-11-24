@@ -5,7 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from wichtelhaus.config import load_config
-from wichtelhaus.sun import SunTimes
+from wichtelhaus.sun import SunTimes, in_season, parse_month_day
 from wichtelhaus.wichtel import ROOMS, Wichtel, parse_hhmm, random_time_between
 
 TZ = ZoneInfo("Europe/Vienna")
@@ -86,6 +86,24 @@ class SunTest(unittest.TestCase):
         self.assertFalse(self.sun.outside_light_on(at(d, 3), time(23, 30)))
         self.assertTrue(self.sun.outside_light_on(at(d, 0, 30), time(1, 0)))
         self.assertFalse(self.sun.outside_light_on(at(d, 1, 30), time(1, 0)))
+
+
+class SeasonTest(unittest.TestCase):
+    def test_december_only_until_22(self):
+        sun = SunTimes(47.86, 16.32, TZ)
+        season = (parse_month_day("01.12."), parse_month_day("31.12."))
+        off = time(22, 0)
+        self.assertTrue(sun.outside_light_on(at(date(2026, 12, 1), 18), off, season))
+        self.assertFalse(sun.outside_light_on(at(date(2026, 12, 1), 22, 5), off, season))
+        self.assertFalse(sun.outside_light_on(at(date(2026, 11, 30), 18), off, season))
+        self.assertTrue(sun.outside_light_on(at(date(2026, 12, 31), 21, 59), off, season))
+        self.assertFalse(sun.outside_light_on(at(date(2027, 1, 1), 18), off, season))
+
+    def test_season_over_new_year(self):
+        season = (parse_month_day("15.12."), parse_month_day("06.01."))
+        self.assertTrue(in_season(date(2026, 12, 20), season))
+        self.assertTrue(in_season(date(2027, 1, 6), season))
+        self.assertFalse(in_season(date(2027, 1, 7), season))
 
 
 class ConfigTest(unittest.TestCase):
