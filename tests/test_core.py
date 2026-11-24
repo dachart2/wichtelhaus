@@ -55,6 +55,16 @@ class WichtelTest(unittest.TestCase):
         self.assertTrue(any("Basteln" in e for e in events))
 
 
+class PlanStabilityTest(unittest.TestCase):
+    def test_restart_keeps_day_plan(self):
+        d = date(2026, 11, 24)
+        a = Wichtel(CFG, TZ, rng=random.Random(1)).plan_for(d)
+        b = Wichtel(CFG, TZ, rng=random.Random(2)).plan_for(d)
+        self.assertEqual((a.wake, a.sleep, a.night_up_start), (b.wake, b.sleep, b.night_up_start))
+        c = Wichtel(CFG, TZ).plan_for(d + timedelta(days=1))
+        self.assertNotEqual((a.wake.time(), a.sleep.time()), (c.wake.time(), c.sleep.time()))
+
+
 class SunTest(unittest.TestCase):
     def setUp(self):
         self.sun = SunTimes(47.86, 16.32, TZ)

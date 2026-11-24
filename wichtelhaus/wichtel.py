@@ -105,8 +105,10 @@ class Wichtel:
         tz: tzinfo,
         rng: Optional[random.Random] = None,
         on_event: Optional[EventCallback] = None,
+        plan_seed: object = 0,
     ):
         self.tz = tz
+        self.plan_seed = plan_seed
         self.rng = rng or random.Random()
         self.on_event: EventCallback = on_event or (lambda now, msg: None)
         self.wake_window = tuple(parse_hhmm(x) for x in cfg["aufwachen"])
@@ -149,7 +151,8 @@ class Wichtel:
     def plan_for(self, day: date) -> DayPlan:
         plan = self._plans.get(day)
         if plan is None:
-            rng = self.rng
+            # Fester Zufall pro Datum: der Tagesplan bleibt bei einem Neustart gleich.
+            rng = random.Random(f"wichtel-{self.plan_seed}-{day.isoformat()}")
             wake = datetime.combine(day, random_time_between(*self.wake_window, rng), tzinfo=self.tz)
             sleep = datetime.combine(day, random_time_between(*self.sleep_window, rng), tzinfo=self.tz)
             plan = DayPlan(day, wake, sleep)

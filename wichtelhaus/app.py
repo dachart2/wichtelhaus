@@ -66,7 +66,10 @@ class WichtelHaus:
             cfg["_cache_path"],
             fixed=args.temp,
         )
-        self.wichtel = Wichtel(cfg["wichtel"], self.tz, rng=random.Random(args.seed), on_event=self._event)
+        self.wichtel = Wichtel(
+            cfg["wichtel"], self.tz, rng=random.Random(args.seed), on_event=self._event,
+            plan_seed=args.seed if args.seed is not None else 0,
+        )
 
         leds = cfg["leds"]
         self.n = int(leds["anzahl"])
