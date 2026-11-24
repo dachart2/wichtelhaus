@@ -10,9 +10,9 @@ standort:
 
 leds:
   pin: 18              # GPIO 18 (PWM), physischer Pin 12
-  anzahl: 144
+  anzahl: 56           # 4 Reihen à 14 LEDs
   pixel_order: GRB     # bei falschen Farben z. B. RGB probieren
-  max_helligkeit: 0.5  # Obergrenze 0–1 für alles. Schont Netzteil und Augen.
+  max_helligkeit: 0.1  # Obergrenze 0–1 für alles. Schont Netzteil und Augen.
   farbe: [255, 147, 41]   # Warmweiß (R, G, B)
   raumhelligkeit: 1.0  # Raum, in dem der Wichtel gerade ist
   grundhelligkeit: 0.25   # die anderen Räume, solange er wach ist
@@ -20,10 +20,10 @@ leds:
   fade_sekunden: 90            # normale Übergänge
   einschlaf_fade_sekunden: 900 # langsames Abdimmen beim Schlafengehen
   zonen:               # [erste LED, letzte LED], gezählt ab 0
-    kueche: [0, 35]
-    wohnbereich: [36, 71]
-    arbeitsecke: [72, 107]
-    schlafbereich: [108, 143]
+    kueche: [0, 13]
+    wohnbereich: [14, 27]
+    arbeitsecke: [28, 41]
+    schlafbereich: [42, 55]
   raeume:              # Raum des Wichtels -> Zone
     kueche: kueche
     wohnbereich: wohnbereich
@@ -51,7 +51,7 @@ wetter:                # Open-Meteo, ohne API-Key
 
 aussenlicht:
   aktiv: true
-  pin: 17              # GPIO 17, physischer Pin 11
+  pin: 21              # GPIO 21, physischer Pin 40
   active_low: true     # die meisten Relais-Module schalten bei LOW
   aus_um: null         # null = bis Sonnenaufgang, oder z. B. "23:30"
 

@@ -5,7 +5,7 @@ zu einer anderen Zeit auf, frühstückt, bastelt, spielt, räumt auf, schaut aus
 dem Fenster, wird müde und geht schlafen. Man sieht ihn nie, aber am Licht merkt
 man, wo er gerade ist:
 
-- **Innenlicht** (NeoPixel, 4 Zonen als Deckenleuchten): warmweiß, wenn es
+- **Innenlicht** (NeoPixel, 56 LEDs in 4 Reihen à 14 als Deckenleuchten): warmweiß, wenn es
   draußen dunkel ist **und** der Wichtel wach ist. Der Raum, in dem er gerade
   ist, leuchtet heller, die anderen gedämpft. Weiche Übergänge, beim
   Schlafengehen dimmt es langsam ab. Steht er nachts auf, gibt es kurz ein
@@ -25,16 +25,16 @@ Internet weg, läuft das Programm mit dem letzten Wert weiter.
 
 | Teil | Anschluss am Pi 3B |
 |---|---|
-| WS2812-Band, 144 LEDs, Daten (DIN) | GPIO 18 (Pin 12), am besten über einen Pegelwandler 74AHCT125 auf 5 V und mit 330-Ω-Widerstand in Reihe |
+| WS2812-Band, 56 LEDs, Daten (DIN) | GPIO 18 (Pin 12), am besten über einen Pegelwandler 74AHCT125 auf 5 V und mit 330-Ω-Widerstand in Reihe |
 | WS2812-Band, 5 V und GND | direkt ans **5-V-Netzteil**, nicht über den Pi |
-| Relais-Modul IN | GPIO 17 (Pin 11) |
+| Relais-Modul IN | GPIO 21 (Pin 40), schaltet bei LOW |
 | Relais-Modul VCC / GND | 5 V (Pin 2) / GND (Pin 6) |
 | **GND** | Pi, Netzteil und Band brauchen eine gemeinsame Masse |
 
-**Netzteil:** 144 LEDs ziehen bei vollem Weiß bis zu 8,6 A. Mit
-`max_helligkeit: 0.5` und Warmweiß sind es real etwa 2–3 A. Empfohlen ist ein
-5-V-Netzteil mit mindestens 4 A für das Band, dazu ein 1000-µF-Kondensator
-zwischen 5 V und GND am Bandanfang. Den Pi am besten mit eigenem Netzteil
+**Netzteil:** 56 LEDs ziehen bei vollem Weiß bis zu 3,4 A. Mit
+`max_helligkeit: 0.1` und Warmweiß sind es real nur ein paar hundert mA. Ein
+5-V-Netzteil mit 2 A reicht, dazu am besten ein 1000-µF-Kondensator zwischen
+5 V und GND am Bandanfang. Den Pi am besten mit eigenem Netzteil
 versorgen.
 
 **Audio:** Das Onboard-Audio des Pi nutzt dieselbe PWM wie GPIO 18 und muss aus

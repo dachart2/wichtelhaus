@@ -19,9 +19,9 @@ DEFAULTS: dict[str, Any] = {
     },
     "leds": {
         "pin": 18,
-        "anzahl": 144,
+        "anzahl": 56,
         "pixel_order": "GRB",
-        "max_helligkeit": 0.5,
+        "max_helligkeit": 0.1,
         "farbe": [255, 147, 41],
         "raumhelligkeit": 1.0,
         "grundhelligkeit": 0.25,
@@ -29,10 +29,10 @@ DEFAULTS: dict[str, Any] = {
         "fade_sekunden": 90,
         "einschlaf_fade_sekunden": 900,
         "zonen": {
-            "kueche": [0, 35],
-            "wohnbereich": [36, 71],
-            "arbeitsecke": [72, 107],
-            "schlafbereich": [108, 143],
+            "kueche": [0, 13],
+            "wohnbereich": [14, 27],
+            "arbeitsecke": [28, 41],
+            "schlafbereich": [42, 55],
         },
         "raeume": {
             "kueche": "kueche",
@@ -53,7 +53,7 @@ DEFAULTS: dict[str, Any] = {
         "glut_helligkeit": 0.3,
     },
     "wetter": {"intervall_minuten": 20, "timeout_sekunden": 10, "cache_datei": "state/temperatur.json"},
-    "aussenlicht": {"aktiv": True, "pin": 17, "active_low": True, "aus_um": None},
+    "aussenlicht": {"aktiv": True, "pin": 21, "active_low": True, "aus_um": None},
     "wichtel": {
         "aufwachen": ["06:00", "09:00"],
         "schlafen": ["20:00", "23:00"],

@@ -91,7 +91,7 @@ class SunTest(unittest.TestCase):
 class ConfigTest(unittest.TestCase):
     def test_shipped_config_is_valid(self):
         cfg = load_config(ROOT / "config.yaml")
-        self.assertEqual(cfg["leds"]["anzahl"], 144)
+        self.assertEqual(cfg["leds"]["anzahl"], 56)
         self.assertEqual(len(cfg["leds"]["zonen"]), 4)
 
 
