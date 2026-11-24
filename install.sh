@@ -37,6 +37,13 @@ else
     REBOOT=1
 fi
 
+# snd_bcm2835 belegt sonst womöglich weiter die PWM
+if [ ! -f /etc/modprobe.d/wichtelhaus-snd-blacklist.conf ]; then
+    echo "blacklist snd_bcm2835" > /etc/modprobe.d/wichtelhaus-snd-blacklist.conf
+    echo "    snd_bcm2835 gesperrt"
+    REBOOT=1
+fi
+
 echo "==> Uhrzeit: Dienst wartet beim Booten auf NTP (der Pi hat keine Echtzeituhr)"
 systemctl enable systemd-time-wait-sync.service 2>/dev/null || true
 

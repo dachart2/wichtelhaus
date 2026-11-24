@@ -3,3 +3,4 @@
 adafruit-blinka>=8.0
 adafruit-circuitpython-neopixel>=6.3
 rpi_ws281x>=5.0
+gpiod>=2.2.2,<3  # von adafruit-blinka auf neueren Kerneln (Trixie) verlangt
