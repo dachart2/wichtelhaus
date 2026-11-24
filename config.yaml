@@ -1,0 +1,62 @@
+# Wichtelhaus – Einstellungen
+# Uhrzeiten bitte immer in Anführungszeichen schreiben, z. B. "23:30".
+# Nach Änderungen: sudo systemctl restart wichtelhaus
+
+standort:
+  name: Zillingdorf-Bergwerk
+  breite: 47.86        # Breitengrad (Nord)
+  laenge: 16.32        # Längengrad (Ost)
+  zeitzone: Europe/Vienna   # Sommer-/Winterzeit automatisch
+
+leds:
+  pin: 18              # GPIO 18 (PWM), physischer Pin 12
+  anzahl: 144
+  pixel_order: GRB     # bei falschen Farben z. B. RGB probieren
+  max_helligkeit: 0.5  # Obergrenze 0–1 für alles. Schont Netzteil und Augen.
+  farbe: [255, 147, 41]   # Warmweiß (R, G, B)
+  raumhelligkeit: 1.0  # Raum, in dem der Wichtel gerade ist
+  grundhelligkeit: 0.25   # die anderen Räume, solange er wach ist
+  nachtlicht: 0.12     # wenn er nachts kurz aufsteht
+  fade_sekunden: 90            # normale Übergänge
+  einschlaf_fade_sekunden: 900 # langsames Abdimmen beim Schlafengehen
+  zonen:               # [erste LED, letzte LED], gezählt ab 0
+    kueche: [0, 35]
+    wohnbereich: [36, 71]
+    arbeitsecke: [72, 107]
+    schlafbereich: [108, 143]
+  raeume:              # Raum des Wichtels -> Zone
+    kueche: kueche
+    wohnbereich: wohnbereich
+    fenster: wohnbereich
+    arbeitsecke: arbeitsecke
+    schlafbereich: schlafbereich
+
+dunkel:                # Innenlicht gilt als "dunkel" ab/bis:
+  vor_sonnenuntergang_min: 30
+  nach_sonnenaufgang_min: 30
+
+ofen:
+  aktiv: true
+  pixel: [0, 1, 2, 3]  # diese LEDs flackern als Feuer (hier: Rand der Küche)
+  nur_ofen: true       # true = diese LEDs sind nie Deckenlicht, nur Ofen
+  temperatur_grenze: 5.0   # °C. Kälter als das = Ofen brennt (wenn der Wichtel wach ist)
+  helligkeit: 0.9
+  glut_minuten: 60     # so lange glimmt die Glut nach dem Einschlafen
+  glut_helligkeit: 0.3
+
+wetter:                # Open-Meteo, ohne API-Key
+  intervall_minuten: 20
+  timeout_sekunden: 10
+  cache_datei: state/temperatur.json   # letzter Wert, falls das Internet weg ist
+
+aussenlicht:
+  aktiv: true
+  pin: 17              # GPIO 17, physischer Pin 11
+  active_low: true     # die meisten Relais-Module schalten bei LOW
+  aus_um: null         # null = bis Sonnenaufgang, oder z. B. "23:30"
+
+wichtel:
+  aufwachen: ["06:00", "09:00"]   # jeden Tag zufällig in diesem Fenster
+  schlafen: ["20:00", "23:00"]
+  nachts_aufstehen: 0.5           # Wahrscheinlichkeit pro Nacht
+  ausflug_chance: 0.015           # pro Minute: kurz in einen anderen Raum

@@ -1,0 +1,6 @@
+# Gemeinsam für PC (Simulation) und Pi
+astral>=3.2
+requests>=2.28
+charset-normalizer>=3.0
+PyYAML>=6.0
+tzdata>=2024.1  # Zeitzonen unter Windows; am Pi harmlos
