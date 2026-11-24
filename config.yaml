@@ -55,6 +55,12 @@ aussenlicht:
   active_low: true     # die meisten Relais-Module schalten bei LOW
   aus_um: null         # null = bis Sonnenaufgang, oder z. B. "23:30"
 
+laterne:               # LED-Lämpchen neben der Tür, eigenes Relais
+  aktiv: true
+  pin: 20              # GPIO 20, physischer Pin 38
+  active_low: true
+  aus_um: null         # null = von Sonnenuntergang bis Sonnenaufgang
+
 wichtel:
   aufwachen: ["06:00", "09:00"]   # jeden Tag zufällig in diesem Fenster
   schlafen: ["20:00", "23:00"]

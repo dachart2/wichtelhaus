@@ -54,6 +54,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "wetter": {"intervall_minuten": 20, "timeout_sekunden": 10, "cache_datei": "state/temperatur.json"},
     "aussenlicht": {"aktiv": True, "pin": 21, "active_low": True, "aus_um": None},
+    "laterne": {"aktiv": True, "pin": 20, "active_low": True, "aus_um": None},
     "wichtel": {
         "aufwachen": ["06:00", "09:00"],
         "schlafen": ["20:00", "23:00"],
@@ -123,8 +124,11 @@ def validate(cfg: dict) -> None:
 
     check(float(cfg["wetter"]["intervall_minuten"]) >= 5, "wetter.intervall_minuten: bitte mindestens 5")
 
-    if cfg["aussenlicht"]["aus_um"] is not None:
-        parse_hhmm(cfg["aussenlicht"]["aus_um"])
+    for key in ("aussenlicht", "laterne"):
+        if cfg[key]["aus_um"] is not None:
+            parse_hhmm(cfg[key]["aus_um"])
+    if cfg["aussenlicht"]["aktiv"] and cfg["laterne"]["aktiv"]:
+        check(int(cfg["aussenlicht"]["pin"]) != int(cfg["laterne"]["pin"]), "aussenlicht und laterne brauchen verschiedene Pins")
 
     w = cfg["wichtel"]
     for key in ("aufwachen", "schlafen"):

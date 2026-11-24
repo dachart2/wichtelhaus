@@ -78,12 +78,15 @@ class WichtelHaus:
         self.fire = Fire(len(self.oven_pixels))
         off_at = cfg["aussenlicht"]["aus_um"]
         self.outside_off_at = parse_hhmm(off_at) if off_at is not None else None
+        lantern_off = cfg["laterne"]["aus_um"]
+        self.lantern_off_at = parse_hhmm(lantern_off) if lantern_off is not None else None
 
         self.pixels: list[Color] = [(0, 0, 0)] * self.n
         self.outside_on = False
+        self.lantern_on = False
         self._last_modes: Optional[tuple] = None
         self._last_live = 0.0
-        self.pixel_out, self.relay_out = make_outputs(cfg, sim=args.sim)
+        self.pixel_out, self.relay_out, self.lantern_out = make_outputs(cfg, sim=args.sim)
 
     # ------------------------------------------------------------ Hauptschleife
     def run(self, days: Optional[float] = None) -> None:
@@ -180,17 +183,21 @@ class WichtelHaus:
         # Außenlicht
         self.outside_on = bool(cfg["aussenlicht"]["aktiv"]) and self.sun.outside_light_on(now, self.outside_off_at)
         self.relay_out.set(self.outside_on)
+        self.lantern_on = bool(cfg["laterne"]["aktiv"]) and self.sun.outside_light_on(now, self.lantern_off_at)
+        self.lantern_out.set(self.lantern_on)
 
         oven_mode = "brennt" if oven_target >= 1 else ("Glut" if oven_target > 0 else "aus")
-        modes = (inside_on, self.outside_on, oven_mode)
+        modes = (inside_on, self.outside_on, oven_mode, self.lantern_on)
         if modes != self._last_modes:
-            old = self._last_modes or (None, None, None)
+            old = self._last_modes or (None, None, None, None)
             if inside_on != old[0]:
                 self._event(now, "Innenlicht " + ("an" if inside_on else "aus (dimmt langsam ab)"))
             if self.outside_on != old[1]:
                 self._event(now, "Außenlicht " + ("AN" if self.outside_on else "aus"))
             if oven_mode != old[2]:
                 self._event(now, f"Ofen: {oven_mode} (draußen {self.weather.describe()})")
+            if self.lantern_on != old[3]:
+                self._event(now, "Laterne " + ("AN" if self.lantern_on else "aus"))
             self._last_modes = modes
 
         if self.live:
@@ -216,7 +223,7 @@ class WichtelHaus:
         temp = self.weather.temperature
         return (
             f"{fmt(now)}  {w.state:<10} {w.doing:<23} @{ROOM_NAMES.get(w.room, w.room):<13} "
-            f"müde {w.tiredness:.2f} | innen {zones} | Ofen {oven} | außen {'AN ' if self.outside_on else 'aus'} | "
+            f"müde {w.tiredness:.2f} | innen {zones} | Ofen {oven} | außen {'AN ' if self.outside_on else 'aus'} | Laterne {'AN ' if self.lantern_on else 'aus'} | "
             + (f"{temp:5.1f} °C" if temp is not None else "  ? °C")
         )
 
@@ -270,6 +277,10 @@ class WichtelHaus:
             self.relay_out.set(True)
             self.stop_event.wait(3)
             self.relay_out.set(False)
+            log.info("Test: Laternen-Relais 3 Sekunden AN")
+            self.lantern_out.set(True)
+            self.stop_event.wait(3)
+            self.lantern_out.set(False)
             log.info("Test fertig.")
         finally:
             self.shutdown()
@@ -291,13 +302,14 @@ class WichtelHaus:
             self.pixel_out.off()
         except Exception:
             log.exception("LEDs konnten nicht ausgeschaltet werden")
-        try:
-            self.relay_out.close()
-        except Exception:
-            log.exception("Relais konnte nicht ausgeschaltet werden")
+        for name, relay in (("Außenlicht", self.relay_out), ("Laterne", self.lantern_out)):
+            try:
+                relay.close()
+            except Exception:
+                log.exception("Relais %s konnte nicht ausgeschaltet werden", name)
         if self.live:
             sys.stdout.write("\n")
-        log.info("LEDs und Außenlicht sind aus. Gute Nacht!")
+        log.info("LEDs, Außenlicht und Laterne sind aus. Gute Nacht!")
 
 
 # ----------------------------------------------------------------- Kommandozeile

@@ -13,8 +13,10 @@ man, wo er gerade ist:
 - **Ofen** (ein paar LEDs, die wie Feuer flackern): brennt, wenn es draußen
   kälter als 5 °C ist und der Wichtel wach ist. Nach dem Einschlafen glimmt noch
   eine Stunde Glut.
-- **Außenlicht** (Relais): von Sonnenuntergang bis Sonnenaufgang oder bis zu
-  einer einstellbaren Uhrzeit.
+- **Außenlicht** (Relais, Lichterkette): von Sonnenuntergang bis Sonnenaufgang
+  oder bis zu einer einstellbaren Uhrzeit.
+- **Laterne** (eigenes Relais, LED-Lämpchen an der Tür): von Sonnenuntergang bis
+  Sonnenaufgang.
 
 Die Sonnenzeiten werden mit `astral` für den echten Standort berechnet,
 Sommer- und Winterzeit über `Europe/Vienna`. Die Außentemperatur kommt alle
@@ -27,7 +29,9 @@ Internet weg, läuft das Programm mit dem letzten Wert weiter.
 |---|---|
 | WS2812-Band, 56 LEDs, Daten (DIN) | GPIO 18 (Pin 12), am besten über einen Pegelwandler 74AHCT125 auf 5 V und mit 330-Ω-Widerstand in Reihe |
 | WS2812-Band, 5 V und GND | direkt ans **5-V-Netzteil**, nicht über den Pi |
-| Relais-Modul IN | GPIO 21 (Pin 40), schaltet bei LOW |
+| 8-Kanal-Relaismodul: Außenlicht (Lichterkette) | GPIO 21 (Pin 40), schaltet bei LOW |
+| 8-Kanal-Relaismodul: Laterne (LED-Lämpchen an der Tür) | GPIO 20 (Pin 38), schaltet bei LOW |
+| weitere Relais-Eingänge (derzeit frei) | GPIO 12, 13, 16, 19 |
 | Relais-Modul VCC / GND | 5 V (Pin 2) / GND (Pin 6) |
 | **GND** | Pi, Netzteil und Band brauchen eine gemeinsame Masse |
 

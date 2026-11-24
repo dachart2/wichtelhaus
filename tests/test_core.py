@@ -93,6 +93,8 @@ class ConfigTest(unittest.TestCase):
         cfg = load_config(ROOT / "config.yaml")
         self.assertEqual(cfg["leds"]["anzahl"], 56)
         self.assertEqual(len(cfg["leds"]["zonen"]), 4)
+        self.assertEqual(cfg["laterne"]["pin"], 20)
+        self.assertEqual(cfg["aussenlicht"]["pin"], 21)
 
 
 if __name__ == "__main__":

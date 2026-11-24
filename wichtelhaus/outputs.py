@@ -84,11 +84,14 @@ class RelayOutput:
         self.io.deinit()
 
 
+def _relay(section: dict, sim: bool):
+    if sim or not section["aktiv"]:
+        return SimRelay()
+    return RelayOutput(section["pin"], section["active_low"])
+
+
 def make_outputs(cfg: dict, sim: bool):
+    """(Pixel, Außenlicht-Relais, Laternen-Relais)"""
     leds = cfg["leds"]
-    outside = cfg["aussenlicht"]
-    if sim:
-        return SimPixels(leds["anzahl"]), SimRelay()
-    pixels = NeoPixelOutput(leds["pin"], leds["anzahl"], leds["pixel_order"])
-    relay = RelayOutput(outside["pin"], outside["active_low"]) if outside["aktiv"] else SimRelay()
-    return pixels, relay
+    pixels = SimPixels(leds["anzahl"]) if sim else NeoPixelOutput(leds["pin"], leds["anzahl"], leds["pixel_order"])
+    return pixels, _relay(cfg["aussenlicht"], sim), _relay(cfg["laterne"], sim)
