@@ -1,9 +1,19 @@
 # Wichtelhaus
 
-Ein unsichtbarer Wichtel (wie Pumuckl) wohnt im Wichtelhaus. Er wacht jeden Tag
-zu einer anderen Zeit auf, frühstückt, bastelt, spielt, räumt auf, schaut aus
-dem Fenster, wird müde und geht schlafen. Man sieht ihn nie, aber am Licht merkt
-man, wo er gerade ist:
+Ein unsichtbarer Wichtel (wie Pumuckl) wohnt im Wichtelhaus. Man sieht ihn nie,
+aber am Licht merkt man, wo er gerade ist.
+
+**Er hat einen freien Willen:** Sein Terminplan (7 Tage voraus, zufällig) sagt
+nur, wann er aufstehen und schlafen gehen *möchte*. Morgens dreht er sich bei
+schlechter Laune, Kälte oder Regen gern noch einmal um. Abends bleibt er länger
+auf, wenn er gut gelaunt bastelt oder spielt, und geht früher ins Bett, wenn er
+sehr müde ist. Er isst, wenn er Hunger hat, holt sich zwischendurch einen Keks,
+schaut bei Schnee gern aus dem Fenster und ruht sich bei Kälte lieber aus.
+Manche Nächte kann er nicht schlafen und steht kurz auf. Alles bleibt in festen
+Grenzen (aufstehen spätestens eine Stunde nach dem Aufwach-Fenster, schlafen
+spätestens 23:55).
+
+
 
 - **Innenlicht** (NeoPixel, 56 LEDs in 4 Reihen à 14 als Deckenleuchten): warmweiß, wenn es
   draußen dunkel ist **und** der Wichtel wach ist. Der Raum, in dem er gerade
@@ -105,6 +115,7 @@ Weitere Optionen:
 | `--start "JJJJ-MM-TT HH:MM"` | simulierte Startzeit |
 | `--days N` | nach N simulierten Tagen beenden |
 | `--temp N` | Außentemperatur fest vorgeben, z. B. `-3` oder `9` |
+| `--wetter schnee\|regen\|klar` | Wetter fest vorgeben |
 | `--seed N` | gleicher Zufall, Lauf wiederholbar |
 | `--live` | eine farbige, laufend aktualisierte Statuszeile (Zonen und Ofenflackern) |
 | `--no-color` | ohne Farben |

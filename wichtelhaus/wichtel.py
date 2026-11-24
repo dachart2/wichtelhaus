@@ -1,18 +1,28 @@
-"""Der unsichtbare Wichtel: Tagesrhythmus, Müdigkeit, Aktivitäten und Räume.
+"""Der unsichtbare Wichtel – mit freiem Willen.
 
-Der Wichtel lebt minutenweise. Jeden Tag würfelt er neu aus, wann er aufwacht
-und wann er schlafen geht. Tagsüber wechselt er zwischen Aktivitäten in
-verschiedenen Räumen, wird dabei müde und macht ab und zu kurze Ausflüge in
-andere Räume. Manche Nächte steht er kurz auf.
+Der Wichtel hat einen Terminplan (wann er aufstehen und schlafen gehen
+*möchte*), aber er entscheidet selbst:
+
+- Morgens dreht er sich bei schlechter Laune oder Kälte noch einmal um.
+- Abends bleibt er länger auf, wenn er gerade gut gelaunt bastelt oder spielt,
+  und geht früher ins Bett, wenn er sehr müde ist.
+- Er isst, wenn er Hunger hat, nicht nach der Uhr, und holt sich zwischendurch
+  einen Keks.
+- Was er tut, hängt von Laune, Müdigkeit und Wetter ab (bei Schnee schaut er
+  gern aus dem Fenster, bei Kälte kuschelt er sich lieber ein).
+- Manche Nächte kann er nicht schlafen und steht kurz auf.
+
+Alle Entscheidungen bleiben innerhalb fester Grenzen, damit das Haus nachts
+nicht taghell ist.
 """
 from __future__ import annotations
 
 import json
 import logging
 import random
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, tzinfo
+from pathlib import Path
 from typing import Callable, Optional, Union
 
 SCHLAEFT = "schläft"
@@ -36,7 +46,9 @@ EXCURSION_REASONS = {
 }
 
 BASE_TIREDNESS = 0.001  # pro wacher Minute, etwa 0.9 nach 15 Stunden
-PLAN_AHEAD_DAYS = 7     # so viele Tage im Voraus steht der Terminplan fest
+HUNGER_PER_MIN = 1 / 280  # nach gut 4 Stunden richtig hungrig
+PLAN_AHEAD_DAYS = 7  # so viele Tage im Voraus steht der Terminplan fest
+LATEST_SLEEP = time(23, 55)  # Schlafengehen muss am selben Tag bleiben
 
 log = logging.getLogger(__name__)
 
@@ -49,25 +61,24 @@ class Activity:
     max_minutes: int
     tiredness: float  # Faktor für die Müdigkeit pro Minute (negativ = erholt sich)
     meal: bool = False
+    fills: float = 0.0  # so viel Hunger bleibt nach dem Essen übrig
 
 
 ACTIVITIES = {
     a.name: a
     for a in (
-        Activity("Frühstück", "kueche", 20, 40, 0.5, meal=True),
-        Activity("Mittagessen", "kueche", 25, 45, 0.5, meal=True),
-        Activity("Abendessen", "kueche", 30, 50, 0.5, meal=True),
+        Activity("Frühstück", "kueche", 20, 40, 0.5, meal=True, fills=0.05),
+        Activity("Mittagessen", "kueche", 25, 45, 0.5, meal=True, fills=0.05),
+        Activity("Abendessen", "kueche", 30, 50, 0.5, meal=True, fills=0.05),
+        Activity("Jause", "kueche", 10, 20, 0.5, meal=True, fills=0.3),
         Activity("Aufräumen", "wohnbereich", 20, 60, 1.3),
         Activity("Basteln", "arbeitsecke", 30, 120, 1.0),
         Activity("Spielen", "wohnbereich", 20, 75, 1.5),
         Activity("Aus dem Fenster schauen", "fenster", 5, 25, 0.7),
-        Activity("Ausruhen", "schlafbereich", 15, 45, -2.0),
+        Activity("Ausruhen", "schlafbereich", 15, 45, -1.5),
     )
 }
-MEALS = (
-    ("Mittagessen", time(12, 0), time(13, 30)),
-    ("Abendessen", time(17, 30), time(19, 0)),
-)
+FUN = {"Basteln", "Spielen"}
 
 
 def parse_hhmm(value: Union[str, int]) -> time:
@@ -89,6 +100,11 @@ def random_time_between(start: time, end: time, rng: random.Random) -> time:
     return time(m // 60, m % 60)
 
 
+def _shift(t: time, minutes: int) -> time:
+    m = max(0, min(23 * 60 + 59, t.hour * 60 + t.minute + minutes))
+    return time(m // 60, m % 60)
+
+
 @dataclass
 class DayPlan:
     day: date
@@ -96,9 +112,24 @@ class DayPlan:
     sleep: datetime
     night_up_start: Optional[datetime] = None
     night_up_end: Optional[datetime] = None
+    decided: set = field(default_factory=set)  # schon getroffene Entscheidungen (nicht gespeichert)
 
     def is_night_up(self, now: datetime) -> bool:
         return self.night_up_start is not None and self.night_up_start <= now < self.night_up_end
+
+
+@dataclass
+class Environment:
+    """Was der Wichtel von draußen mitbekommt."""
+
+    temperature: Optional[float] = None
+    snowing: bool = False
+    raining: bool = False
+    dark: bool = False
+
+    @property
+    def cold(self) -> bool:
+        return self.temperature is not None and self.temperature < 0
 
 
 EventCallback = Callable[[datetime, str], None]
@@ -122,7 +153,13 @@ class Wichtel:
         self.sleep_window = tuple(parse_hhmm(x) for x in cfg["schlafen"])
         self.night_up_chance = float(cfg["nachts_aufstehen"])
         self.excursion_chance = float(cfg["ausflug_chance"])
+        # Grenzen für den freien Willen
+        self.latest_wake = _shift(self.wake_window[1], 60)
+        self.earliest_sleep = _shift(self.sleep_window[0], -30)
+        self.latest_sleep = min(_shift(self.sleep_window[1], 60), LATEST_SLEEP)
+
         self._plans: dict[date, DayPlan] = {}
+        self.env = Environment()
         self.state: Optional[str] = None
         self.activity: Optional[Activity] = None
         self.activity_end: Optional[datetime] = None
@@ -130,6 +167,8 @@ class Wichtel:
         self.excursion_room: Optional[str] = None
         self.excursion_end: Optional[datetime] = None
         self.tiredness = 0.0
+        self.hunger = 0.3
+        self.mood = 0.6  # Laune 0 (grantig) .. 1 (bestens)
         self.asleep_since: Optional[datetime] = None
         self.meals_done: set[str] = set()
         self._load_plans()
@@ -155,6 +194,14 @@ class Wichtel:
             return "trinkt ein Glas Wasser"
         return "schläft"
 
+    @property
+    def mood_text(self) -> str:
+        if self.mood >= 0.75:
+            return "bestens gelaunt"
+        if self.mood >= 0.45:
+            return "zufrieden"
+        return "ein bisschen grantig"
+
     # ------------------------------------------------------------------- Pläne
     def plan_for(self, day: date) -> DayPlan:
         plan = self._plans.get(day)
@@ -164,7 +211,7 @@ class Wichtel:
         return plan
 
     def _new_plan(self, day: date) -> DayPlan:
-        """Echt zufälliger Tagesplan: Aufstehen, Schlafengehen, nächtliches Aufstehen."""
+        """Echt zufälliger Vorsatz: Aufstehen, Schlafengehen, nächtliches Aufstehen."""
         rng = self.rng
         wake = datetime.combine(day, random_time_between(*self.wake_window, rng), tzinfo=self.tz)
         sleep = datetime.combine(day, random_time_between(*self.sleep_window, rng), tzinfo=self.tz)
@@ -172,8 +219,7 @@ class Wichtel:
         if rng.random() < self.night_up_chance:
             start = sleep + timedelta(minutes=rng.randint(60, 300))
             end = start + timedelta(minutes=rng.randint(3, 10))
-            latest = datetime.combine(day + timedelta(days=1), self.wake_window[0], tzinfo=self.tz)
-            if end < latest - timedelta(minutes=30):
+            if end < self._at(day + timedelta(days=1), self.wake_window[0]) - timedelta(minutes=30):
                 plan.night_up_start, plan.night_up_end = start, end
         return plan
 
@@ -188,6 +234,242 @@ class Wichtel:
 
     def upcoming(self, today: date, days: int = PLAN_AHEAD_DAYS) -> list[DayPlan]:
         return [self.plan_for(today + timedelta(days=i)) for i in range(days)]
+
+    def _at(self, day: date, t: time) -> datetime:
+        return datetime.combine(day, t, tzinfo=self.tz)
+
+    # ------------------------------------------------------------------ Ablauf
+    def resync(self, now: datetime) -> None:
+        """Nach einem Zeitsprung (z. B. NTP nach dem Booten) neu einstellen."""
+        self.state = None
+        self._end_excursion()
+        self.step(now)
+
+    def step(self, now: datetime, env: Optional[Environment] = None) -> None:
+        """Eine Minute Wichtel-Leben."""
+        if env is not None:
+            self.env = env
+        if self._planned_for != now.date():
+            self.plan_ahead(now.date())
+        today = self.plan_for(now.date())
+        yesterday = self.plan_for(now.date() - timedelta(days=1))
+
+        if self.state is None:
+            self._init_state(now, today, yesterday)
+            return
+
+        should_be_awake = today.wake <= now < today.sleep
+
+        # Freier Wille an den Übergängen
+        if should_be_awake and self.state != WACH and "wake" not in today.decided:
+            today.decided.add("wake")
+            if self._decide_snooze(now, today):
+                return
+        if not should_be_awake and self.state == WACH and "sleep" not in today.decided and now.date() == today.day:
+            today.decided.add("sleep")
+            if self._decide_stay_up(now, today):
+                self._live_minute(now, today)
+                return
+
+        if should_be_awake:
+            if self.state != WACH:
+                self._wake_up(now, today)
+            else:
+                self._live_minute(now, today)
+            return
+
+        if self.state == WACH:
+            self._go_to_bed(now)
+        up = today.is_night_up(now) or yesterday.is_night_up(now)
+        if up and self.state == SCHLAEFT:
+            self.state = NACHTS_AUF
+            self.home_room = "kueche"
+            why = "kann nicht schlafen" if self.tiredness < 0.6 else "hat Durst"
+            self.on_event(now, f"Der Wichtel {why}, steht auf und trinkt ein Glas Wasser (Küche)")
+        elif not up and self.state == NACHTS_AUF:
+            self.state = SCHLAEFT
+            self.home_room = "schlafbereich"
+            self.on_event(now, "… und schlüpft wieder unter die Decke")
+
+    # ------------------------------------------------------- Entscheidungen
+    def _decide_snooze(self, now: datetime, plan: DayPlan) -> bool:
+        """Beim Wecken: noch liegen bleiben?"""
+        chance = 0.2 + 0.3 * (1 - self.mood)
+        reasons = []
+        if self.env.cold:
+            chance += 0.15
+            reasons.append("draußen ist es eisig")
+        if self.env.raining:
+            chance += 0.1
+            reasons.append("es regnet")
+        if self.env.snowing:
+            chance -= 0.15  # Schnee! Schnell ans Fenster
+        latest = self._at(plan.day, self.latest_wake)
+        if self.rng.random() >= chance or now >= latest:
+            return False
+        minutes = self.rng.randint(10, 45)
+        plan.wake = min(now + timedelta(minutes=minutes), latest)
+        self.save_plans()
+        why = f" ({', '.join(reasons)})" if reasons else ""
+        self.on_event(now, f"Der Wichtel dreht sich noch einmal um{why} und schläft bis {plan.wake:%H:%M}")
+        return True
+
+    def _decide_stay_up(self, now: datetime, plan: DayPlan) -> bool:
+        """Zur geplanten Schlafenszeit: noch ein bisschen aufbleiben?"""
+        act = self.activity
+        if act is None or act.name not in FUN or self.tiredness >= 0.9:
+            return False
+        if self.rng.random() >= 0.25 + 0.35 * self.mood:
+            return False
+        latest = self._at(plan.day, self.latest_sleep)
+        if now >= latest:
+            return False
+        plan.sleep = min(now + timedelta(minutes=self.rng.randint(10, 45)), latest)
+        self.activity_end = max(self.activity_end or now, plan.sleep)
+        self.save_plans()
+        what = "will sein Bastelprojekt noch fertig machen" if act.name == "Basteln" else "will unbedingt noch weiterspielen"
+        self.on_event(now, f"Der Wichtel {what} und bleibt bis {plan.sleep:%H:%M} auf")
+        return True
+
+    # ----------------------------------------------------------------- Phasen
+    def _init_state(self, now: datetime, today: DayPlan, yesterday: DayPlan) -> None:
+        self.mood = self.rng.uniform(0.3, 1.0)
+        if today.wake <= now < today.sleep:
+            today.decided.add("wake")
+            self.state = WACH
+            minutes = (now - today.wake).total_seconds() / 60
+            self.tiredness = min(0.95, minutes * BASE_TIREDNESS)
+            self.hunger = self.rng.uniform(0.1, 0.6)
+            self.meals_done = {"Frühstück"}
+            self._start_activity(now, self._choose_activity(now))
+            self.on_event(
+                now,
+                f"Start: Der Wichtel ist wach ({self.doing}, {ROOM_NAMES[self.room]}, {self.mood_text}), "
+                f"möchte heute um {today.sleep:%H:%M} schlafen gehen",
+            )
+        else:
+            self.state = SCHLAEFT
+            self.home_room = "schlafbereich"
+            self.asleep_since = today.sleep if now >= today.sleep else yesterday.sleep
+            if now >= today.sleep:
+                today.decided.update({"wake", "sleep"})
+            next_wake = today.wake if now < today.wake else self.plan_for(now.date() + timedelta(days=1)).wake
+            self.on_event(now, f"Start: Der Wichtel schläft, möchte um {next_wake:%H:%M} aufstehen")
+
+    def _wake_up(self, now: datetime, plan: DayPlan) -> None:
+        self.state = WACH
+        self.asleep_since = None
+        self.tiredness = self.rng.uniform(0.0, 0.08)
+        self.hunger = 0.7
+        self.meals_done = set()
+        self.mood = self.rng.uniform(0.3, 1.0)
+        if self.env.snowing:
+            self.mood = min(1.0, self.mood + 0.2)
+        elif self.env.raining:
+            self.mood = max(0.0, self.mood - 0.1)
+        self._start_activity(now, ACTIVITIES["Frühstück"])
+        self.on_event(
+            now,
+            f"Der Wichtel wacht auf, ist {self.mood_text} und macht Frühstück "
+            f"(möchte heute um {plan.sleep:%H:%M} schlafen gehen)",
+        )
+
+    def _go_to_bed(self, now: datetime, early: bool = False) -> None:
+        self.state = SCHLAEFT
+        self.activity = None
+        self._end_excursion()
+        self.home_room = "schlafbereich"
+        self.asleep_since = now
+        next_wake = self.plan_for(now.date() + timedelta(days=1)).wake
+        note = ", früher als geplant" if early else ""
+        self.on_event(
+            now, f"Der Wichtel geht schlafen (Müdigkeit {self.tiredness:.2f}{note}), möchte um {next_wake:%H:%M} aufstehen"
+        )
+
+    def _live_minute(self, now: datetime, plan: DayPlan) -> None:
+        act = self.activity
+        assert act is not None
+        self.tiredness = max(0.0, min(1.2, self.tiredness + BASE_TIREDNESS * act.tiredness))
+        if not act.meal:
+            self.hunger = min(1.2, self.hunger + HUNGER_PER_MIN)
+
+        # Sehr müde am Abend: früher ins Bett
+        if self.tiredness >= 1.0 and now.time() >= self.earliest_sleep and "sleep" not in plan.decided:
+            plan.decided.add("sleep")
+            plan.sleep = now
+            self.save_plans()
+            self._go_to_bed(now, early=True)
+            return
+
+        if self.excursion_room and now >= self.excursion_end:
+            self._end_excursion()
+
+        # Großer Hunger unterbricht fast alles (außer Essen)
+        if not act.meal and self.hunger >= 1.0:
+            self.activity_end = now
+
+        if now >= self.activity_end:
+            nxt = self._choose_activity(now)
+            self._start_activity(now, nxt)
+            extra = " – es schneit!" if nxt.room == "fenster" and self.env.snowing else ""
+            self.on_event(
+                now,
+                f"{nxt.name} ({ROOM_NAMES[nxt.room]}){extra}, müde {self.tiredness:.2f}, hungrig {self.hunger:.2f}",
+            )
+            return
+
+        if not self.excursion_room and not act.meal:
+            hungry = self.hunger >= 0.6
+            if self.rng.random() < self.excursion_chance * (1.5 if hungry else 1.0):
+                if hungry and self.home_room != "kueche" and self.rng.random() < 0.5:
+                    room = "kueche"
+                    self.hunger = max(0.0, self.hunger - 0.05)  # ein Keks macht nicht satt
+                else:
+                    room = self.rng.choice([r for r in ROOMS if r != self.home_room])
+                self.excursion_room = room
+                self.excursion_end = now + timedelta(minutes=self.rng.randint(1, 4))
+                self.on_event(now, f"kurzer Ausflug: {EXCURSION_REASONS[room]} ({ROOM_NAMES[room]})")
+
+    def _meal_for(self, now: datetime) -> Activity:
+        h = now.hour + now.minute / 60
+        if "Frühstück" not in self.meals_done and h < 10.5:
+            return ACTIVITIES["Frühstück"]
+        if "Mittagessen" not in self.meals_done and 11 <= h < 14.5:
+            return ACTIVITIES["Mittagessen"]
+        if "Abendessen" not in self.meals_done and 17 <= h < 20.5:
+            return ACTIVITIES["Abendessen"]
+        return ACTIVITIES["Jause"]
+
+    def _choose_activity(self, now: datetime) -> Activity:
+        meal = self._meal_for(now)
+        if self.hunger >= 0.75 or (meal.name != "Jause" and self.hunger >= 0.45):
+            return meal  # bei großem Hunger, oder zur Essenszeit schon bei mittlerem
+        t, m, env = self.tiredness, self.mood, self.env
+        weights = {
+            "Aufräumen": 2.0 * (1.3 - m),
+            "Basteln": 3.0 * (0.8 + 0.4 * m),
+            "Spielen": 2.5 * max(0.1, 1.1 - t) * (0.6 + m),
+            "Aus dem Fenster schauen": 1.5 * (2.0 if env.snowing else 1.0) * (1.3 if env.dark else 1.0),
+            "Ausruhen": 0.3 + 3.0 * t + (0.4 if env.cold else 0.0),
+        }
+        if self.activity and self.activity.name in weights:
+            weights[self.activity.name] *= 0.3  # nicht ständig dasselbe
+        names = list(weights)
+        return ACTIVITIES[self.rng.choices(names, weights=[max(0.05, weights[n]) for n in names])[0]]
+
+    def _start_activity(self, now: datetime, act: Activity) -> None:
+        self.activity = act
+        self.activity_end = now + timedelta(minutes=self.rng.randint(act.min_minutes, act.max_minutes))
+        self.home_room = act.room
+        self._end_excursion()
+        if act.meal:
+            self.meals_done.add(act.name)
+            self.hunger = min(self.hunger, act.fills)
+            self.mood = min(1.0, self.mood + 0.05)  # Essen macht froh
+
+    def _end_excursion(self) -> None:
+        self.excursion_room = None
+        self.excursion_end = None
 
     # ------------------------------------------------------------ Speichern
     def _load_plans(self) -> None:
@@ -242,138 +524,3 @@ class Wichtel:
             tmp.replace(self.plan_file)
         except OSError as exc:
             log.warning("Terminplan konnte nicht gespeichert werden: %s", exc)
-
-    # ------------------------------------------------------------------ Ablauf
-    def resync(self, now: datetime) -> None:
-        """Nach einem Zeitsprung (z. B. NTP nach dem Booten) neu einstellen."""
-        self.state = None
-        self._end_excursion()
-        self.step(now)
-
-    def step(self, now: datetime) -> None:
-        """Eine Minute Wichtel-Leben."""
-        if self._planned_for != now.date():
-            self.plan_ahead(now.date())
-        today = self.plan_for(now.date())
-        yesterday = self.plan_for(now.date() - timedelta(days=1))
-        should_be_awake = today.wake <= now < today.sleep
-
-        if self.state is None:
-            self._init_state(now, today, yesterday, should_be_awake)
-            return
-
-        if should_be_awake:
-            if self.state != WACH:
-                self._wake_up(now, today)
-            else:
-                self._live_minute(now, today)
-            return
-
-        if self.state == WACH:
-            self._go_to_bed(now)
-        up = today.is_night_up(now) or yesterday.is_night_up(now)
-        if up and self.state == SCHLAEFT:
-            self.state = NACHTS_AUF
-            self.home_room = "kueche"
-            self.on_event(now, "Der Wichtel steht nachts auf und trinkt ein Glas Wasser (Küche)")
-        elif not up and self.state == NACHTS_AUF:
-            self.state = SCHLAEFT
-            self.home_room = "schlafbereich"
-            self.on_event(now, "… und schlüpft wieder unter die Decke")
-
-    def _init_state(self, now: datetime, today: DayPlan, yesterday: DayPlan, awake: bool) -> None:
-        if awake:
-            self.state = WACH
-            minutes = (now - today.wake).total_seconds() / 60
-            self.tiredness = min(0.95, minutes * BASE_TIREDNESS)
-            self.meals_done = {"Frühstück"} | {name for name, _, end in MEALS if now.time() >= end}
-            self._start_activity(now, self._choose_activity(now))
-            self.on_event(
-                now,
-                f"Start: Der Wichtel ist wach ({self.doing}, {ROOM_NAMES[self.room]}), "
-                f"geht heute um {today.sleep:%H:%M} schlafen",
-            )
-        else:
-            self.state = SCHLAEFT
-            self.home_room = "schlafbereich"
-            self.asleep_since = today.sleep if now >= today.sleep else yesterday.sleep
-            next_wake = today.wake if now < today.wake else self.plan_for(now.date() + timedelta(days=1)).wake
-            self.on_event(now, f"Start: Der Wichtel schläft, wacht um {next_wake:%H:%M} auf")
-
-    def _wake_up(self, now: datetime, plan: DayPlan) -> None:
-        self.state = WACH
-        self.asleep_since = None
-        self.tiredness = self.rng.uniform(0.0, 0.08)
-        self.meals_done = set()
-        self._start_activity(now, ACTIVITIES["Frühstück"])
-        self.on_event(
-            now, f"Der Wichtel wacht auf und macht Frühstück (geht heute um {plan.sleep:%H:%M} schlafen)"
-        )
-
-    def _go_to_bed(self, now: datetime, early: bool = False) -> None:
-        self.state = SCHLAEFT
-        self.activity = None
-        self._end_excursion()
-        self.home_room = "schlafbereich"
-        self.asleep_since = now
-        next_wake = self.plan_for(now.date() + timedelta(days=1)).wake
-        note = ", früher als geplant" if early else ""
-        self.on_event(
-            now, f"Der Wichtel geht schlafen (Müdigkeit {self.tiredness:.2f}{note}), wacht um {next_wake:%H:%M} auf"
-        )
-
-    def _live_minute(self, now: datetime, plan: DayPlan) -> None:
-        act = self.activity
-        assert act is not None
-        self.tiredness = max(0.0, min(1.2, self.tiredness + BASE_TIREDNESS * act.tiredness))
-
-        # Sehr müde am Abend: früher ins Bett
-        if self.tiredness >= 1.0 and now.time() >= self.sleep_window[0]:
-            plan.sleep = now
-            self.save_plans()
-            self._go_to_bed(now, early=True)
-            return
-
-        if self.excursion_room and now >= self.excursion_end:
-            self._end_excursion()
-
-        if now >= self.activity_end:
-            nxt = self._choose_activity(now)
-            self._start_activity(now, nxt)
-            self.on_event(now, f"{nxt.name} ({ROOM_NAMES[nxt.room]}), Müdigkeit {self.tiredness:.2f}")
-            return
-
-        if not self.excursion_room and not act.meal and self.rng.random() < self.excursion_chance:
-            room = self.rng.choice([r for r in ROOMS if r != self.home_room])
-            self.excursion_room = room
-            self.excursion_end = now + timedelta(minutes=self.rng.randint(1, 4))
-            self.on_event(now, f"kurzer Ausflug: {EXCURSION_REASONS[room]} ({ROOM_NAMES[room]})")
-
-    def _choose_activity(self, now: datetime) -> Activity:
-        t = now.time()
-        for name, start, end in MEALS:
-            if name not in self.meals_done and start <= t < end:
-                return ACTIVITIES[name]
-        weights = {
-            "Aufräumen": 2.0,
-            "Basteln": 3.0,
-            "Spielen": 2.5 * max(0.1, 1.1 - self.tiredness),
-            "Aus dem Fenster schauen": 1.5,
-            "Ausruhen": 0.3 + 3.0 * self.tiredness,
-        }
-        if self.activity and self.activity.name in weights:
-            weights[self.activity.name] *= 0.3  # nicht ständig dasselbe
-        names = list(weights)
-        return ACTIVITIES[self.rng.choices(names, weights=[weights[n] for n in names])[0]]
-
-    def _start_activity(self, now: datetime, act: Activity) -> None:
-        self.activity = act
-        self.activity_end = now + timedelta(minutes=self.rng.randint(act.min_minutes, act.max_minutes))
-        self.home_room = act.room
-        self._end_excursion()
-        if act.meal:
-            self.meals_done.add(act.name)
-
-    def _end_excursion(self) -> None:
-        self.excursion_room = None
-        self.excursion_end = None

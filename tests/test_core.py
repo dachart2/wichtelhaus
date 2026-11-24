@@ -41,7 +41,7 @@ class WichtelTest(unittest.TestCase):
             w.step(now)
             self.assertIn(w.room, ROOMS)
             if w.awake:
-                self.assertTrue(time(6) <= now.time() < time(23), now)
+                self.assertTrue(time(6) <= now.time() < time(23, 56), now)
                 self.assertTrue(0 <= w.tiredness <= 1.2)
             if now.time() == time(12, 0):
                 self.assertTrue(w.awake, now)

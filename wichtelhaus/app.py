@@ -23,7 +23,7 @@ from .fire import Fire
 from .outputs import make_outputs
 from .sun import SunTimes, parse_month_day
 from .weather import Weather
-from .wichtel import ROOM_NAMES, Wichtel, parse_hhmm
+from .wichtel import ROOM_NAMES, Environment, Wichtel, parse_hhmm
 
 log = logging.getLogger("wichtelhaus")
 
@@ -65,6 +65,7 @@ class WichtelHaus:
             wcfg["timeout_sekunden"],
             cfg["_cache_path"],
             fixed=args.temp,
+            fixed_code={"schnee": 73, "regen": 63, "klar": 0}.get(args.wetter) if args.wetter else None,
         )
         self.wichtel = Wichtel(
             cfg["wichtel"], self.tz, rng=random.Random(args.seed), on_event=self._event,
@@ -116,7 +117,7 @@ class WichtelHaus:
                     last = now
                 while next_min <= now:
                     local = next_min.astimezone(self.tz)
-                    self.wichtel.step(local)
+                    self.wichtel.step(local, self._environment(local))
                     if local.minute == 0 and self.sim and not self.live:
                         log.info("%s", self.status_line(local))
                     next_min += timedelta(minutes=1)
@@ -212,6 +213,15 @@ class WichtelHaus:
                 sys.stdout.write("\r" + self.status_line(now) + "\x1b[K")
                 sys.stdout.flush()
 
+    def _environment(self, now: datetime) -> Environment:
+        d = self.cfg["dunkel"]
+        return Environment(
+            temperature=self.weather.temperature,
+            snowing=self.weather.snowing,
+            raining=self.weather.raining,
+            dark=self.sun.is_dark(now, d["vor_sonnenuntergang_min"], d["nach_sonnenaufgang_min"]),
+        )
+
     @staticmethod
     def _season(value):
         return None if value is None else (parse_month_day(value[0]), parse_month_day(value[1]))
@@ -232,7 +242,7 @@ class WichtelHaus:
         temp = self.weather.temperature
         return (
             f"{fmt(now)}  {w.state:<10} {w.doing:<23} @{ROOM_NAMES.get(w.room, w.room):<13} "
-            f"müde {w.tiredness:.2f} | innen {zones} | Ofen {oven} | außen {'AN ' if self.outside_on else 'aus'} | Laterne {'AN ' if self.lantern_on else 'aus'} | "
+            f"müde {w.tiredness:.2f} hungrig {w.hunger:.2f} Laune {w.mood:.2f} | innen {zones} | Ofen {oven} | außen {'AN ' if self.outside_on else 'aus'} | Laterne {'AN ' if self.lantern_on else 'aus'} | "
             + (f"{temp:5.1f} °C" if temp is not None else "  ? °C")
         )
 
@@ -361,6 +371,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--days", type=float, help="nach so vielen (simulierten) Tagen beenden")
     p.add_argument("--temp", type=float, help="Außentemperatur fest vorgeben statt aus dem Internet")
     p.add_argument("--seed", type=int, help="Zufalls-Startwert, damit ein Lauf wiederholbar ist")
+    p.add_argument("--wetter", choices=["schnee", "regen", "klar"], help="Wetter fest vorgeben (zum Testen)")
     p.add_argument("--live", action="store_true", help="eine laufend aktualisierte Statuszeile (mit Farbe)")
     p.add_argument("--no-color", action="store_true", help="keine ANSI-Farben in der Konsole")
     p.add_argument("--test-hardware", action="store_true", help="Zonen, Ofen und Relais nacheinander testen")
